@@ -1,47 +1,32 @@
 import * as React from "react";
+import {Auth} from "@/components/auth";
+import {useState, useEffect} from "react";
 import {
-  useRunProgram,
-  useStoreValue,
-  useStoreProgram,
+  useNilCompute,
+  useNilComputeOutput,
   useNillion,
-  useFetchProgramOutput,
+  useNilStoreProgram,
+  useNilStoreValue
 } from "@nillion/client-react-hooks";
-import {useEffect, useState} from "react";
-import {
-  ProgramId,
-  PartyName,
-  Permissions,
-  PartyId,
-  StoreId,
-  ProgramBindings,
-  NadaValues,
-  NadaValue,
-  NamedValue,
-} from "@nillion/client-core";
+import {NadaValues, PartyName, ProgramBindings, ProgramId, StoreAcl} from "@nillion/client-core";
 import {transformNadaProgramToUint8Array} from "@/utils/nadaTransform";
 
 export default function Compute() {
-  // UseStates
+  const {client} = useNillion()
+
+  const nilStoreProgram = useNilStoreProgram()
   const [selectedProgramCode, setSelectedProgramCode] = useState("");
+
+  const nilStoreValue1 = useNilStoreValue({ttl: 30}) // 30 days
+  const nilStoreValue2 = useNilStoreValue({ttl: 30}) // 30 days
   const [secretValue1, setSecretValue1] = useState<number>(0);
   const [secretValue2, setSecretValue2] = useState<number>(0);
-  const [programID, setProgramID] = useState<ProgramId>();
-  const [secretValue1ID, setSecretValue1ID] = useState<StoreId>();
-  const [secretValue2ID, setSecretValue2ID] = useState<StoreId>();
-  const [computeResult, setComputeResult] = useState<any | null>(null);
-  const [computeID, setComputeID] = useState<any | null>(null);
 
-  // Use of Nillion Hooks
-  const client = useNillion();
-  const storeProgram = useStoreProgram();
-  const storeValue = useStoreValue();
-  const runProgram = useRunProgram();
-  const fetchProgram = useFetchProgramOutput({
-    id: computeID,
-  });
+  const nilCompute = useNilCompute();
+  const nilComputeOutput = useNilComputeOutput()
 
   // Other CONSTS
-  const PARTY_NAME = "Party1" as PartyName;
+  const PARTY_NAME = PartyName.parse("Party1");
   const PROGRAM_NAME = "secret_addition";
 
   // Fetch Nada Program Code.
@@ -51,7 +36,7 @@ export default function Compute() {
       const text = await response.text();
       setSelectedProgramCode(text);
     };
-    fetchProgramCode();
+    void fetchProgramCode();
   }, [selectedProgramCode]);
 
   // Action to store Program with Nada
@@ -60,11 +45,10 @@ export default function Compute() {
       const programBinary = await transformNadaProgramToUint8Array(
         `/programs/${PROGRAM_NAME}.nada.bin`
       );
-      const result = await storeProgram.mutateAsync({
+      nilStoreProgram.execute({
         name: PROGRAM_NAME,
         program: programBinary,
       });
-      setProgramID(result!);
     } catch (error) {
       console.log("error", error);
     }
@@ -72,97 +56,70 @@ export default function Compute() {
 
   // Action to handle storing secret integer 1
   const handleStoreSecretInteger1 = async () => {
-    try {
-      const permissions = Permissions.create().allowCompute(
-        client.vm.userId,
-        programID as ProgramId
-      );
+    if (!nilStoreProgram.isSuccess) throw new Error("nilStoreProgram failed")
 
-      const result = await storeValue.mutateAsync({
-        values: {
-          mySecretInt: secretValue1,
-        },
-        ttl: 3600,
-        permissions,
-      });
-      setSecretValue1ID(result);
-    } catch (error) {
-      console.error("Error storing SecretInteger:", error);
-    }
+    const acl = StoreAcl.create().allowCompute(
+      client.userId,
+      ProgramId.parse(nilStoreProgram.data)
+    ); // TODO(tim) accept acl as execute parameter
+
+    nilStoreValue1.execute(secretValue1)
   };
 
   // Action to handle storing secret integer 2
   const handleStoreSecretInteger2 = async () => {
-    try {
-      const permissions = Permissions.create().allowCompute(
-        client.vm.userId,
-        programID as ProgramId
-      );
-      const result = await storeValue.mutateAsync({
-        values: {
-          mySecretInt: secretValue2,
-        },
-        ttl: 3600,
-        permissions,
-      });
-      console.log("Stored SecretInteger2:", result);
-      setSecretValue2ID(result);
-    } catch (error) {
-      console.error("Error storing SecretInteger2:", error);
-    }
+    if (!nilStoreProgram.isSuccess) throw new Error("nilStoreProgram failed")
+
+    const acl = StoreAcl.create().allowCompute(
+      client.userId,
+      ProgramId.parse(nilStoreProgram.data)
+    ); // TODO(tim) accept acl as execute parameter
+
+    nilStoreValue2.execute(secretValue2)
   };
 
   // Handle using the secret_addition Program
   const handleUseProgram = async () => {
-    try {
-      // Bindings
-      const bindings = ProgramBindings.create(programID!);
-      bindings.addInputParty(
-        PARTY_NAME as PartyName,
-        client.vm.partyId as PartyId
-      );
-      bindings.addOutputParty(
-        PARTY_NAME as PartyName,
-        client.vm.partyId as PartyId
-      );
+    if (!nilStoreProgram.isSuccess || !nilStoreValue1.isSuccess || !nilStoreValue2.isSuccess)
+      throw new Error("nilStoreProgram failed")
 
-      const values = NadaValues.create()
-        .insert(
-          NamedValue.parse("my_int1"),
-          NadaValue.createSecretInteger(secretValue1)
-        )
-        .insert(
-          NamedValue.parse("my_int2"),
-          NadaValue.createSecretInteger(secretValue2)
-        );
+    // Bindings
+    const bindings = ProgramBindings.create(nilStoreProgram.data);
+    bindings.addInputParty(
+      PARTY_NAME,
+      client.partyId
+    );
 
-      const res = await runProgram.mutateAsync({
-        bindings: bindings,
-        values,
-        storeIds: [],
-      });
+    bindings.addOutputParty(
+      PARTY_NAME,
+      client.partyId
+    );
 
-      console.log(res, "computeID");
-
-      setComputeID(res);
-    } catch (error) {
-      console.error("Error executing program:", error);
-      throw error;
-    }
+    nilCompute.execute({
+      bindings,
+      values: NadaValues.create(),
+      storeIds: [nilStoreValue1.data, nilStoreValue2.data],
+    });
   };
 
-  // Fetch the new compute result
-  useEffect(() => {
-    if (fetchProgram.data) {
-      // @ts-ignore
-      setComputeResult(fetchProgram.data.my_output.toString());
-    }
-  }, [fetchProgram.data]);
+  const handleFetchComputeResult = async () => {
+    if (!nilCompute.isSuccess) throw new Error("nilCompute failed or hasn't run")
+    nilComputeOutput.execute(nilCompute.data)
+  }
 
-  console.log(computeResult, "computeResult");
+  let computeResult = ""
+  if(nilComputeOutput.isSuccess) {
+    computeResult = JSON.stringify(nilComputeOutput.data, (key, value) => {
+      if (typeof value === "bigint") {
+        return value.toString();
+      }
+      return value;
+    });
+  }
 
   return (
     <div className="flex flex-col justify-center min-h-screen p-8 bg-white text-black">
+      <Auth/>
       {/* Store Programs Section */}
       <div className="mt-4">
         <h3 className="text-lg font-semibold mb-2">Program Code:</h3>
@@ -179,9 +136,9 @@ export default function Compute() {
         </button>
       </div>
 
-      {programID && (
+      {nilStoreProgram.isSuccess && (
         <div className="mt-4">
-          <p className="text-sm text-gray-600">Program ID: {programID}</p>
+          <p className="text-sm text-gray-600">Program ID: {nilStoreProgram.data}</p>
         </div>
       )}
 
@@ -204,10 +161,10 @@ export default function Compute() {
           Store Secret
         </button>
 
-        {secretValue1ID && (
+        {nilStoreValue1.isSuccess && (
           <div className="mt-4">
             <p className="text-sm text-gray-600">
-              Secret Value 1 ID: {secretValue1ID}
+              Secret Value 1 ID: {nilStoreValue1.data}
             </p>
           </div>
         )}
@@ -226,10 +183,10 @@ export default function Compute() {
           Store Secret
         </button>
 
-        {secretValue2ID && (
+        {nilStoreValue2.isSuccess && (
           <div className="mt-4">
             <p className="text-sm text-gray-600">
-              Secret Value 2 ID: {secretValue2ID}
+              Secret Value 2 ID: {nilStoreValue2.data}
             </p>
           </div>
         )}
@@ -241,19 +198,30 @@ export default function Compute() {
       <div>
         <h3 className="text-lg font-semibold mb-2 text-left">Compute:</h3>
         <button
-          onClick={() => handleUseProgram()}
+          onClick={handleUseProgram}
           className="bg-blue-500 mb-4 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition duration-300 ease-in-out mt-2"
         >
           Compute
         </button>
-        {computeResult && (
-          <div className="mt-4">
-            <p className="text-sm text-gray-600">
-              Compute Result: {computeResult}
-            </p>
-          </div>
-        )}
+        {nilCompute.isSuccess && (
+          <>
+            <h3 className="text-lg font-semibold mb-2 text-left">Fetch result:</h3>
+            <button
+              onClick={handleFetchComputeResult}
+              className="bg-blue-500 mb-4 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition duration-300 ease-in-out mt-2"
+            >
+              Fetch Compute Result
+            </button>
+            {nilComputeOutput.isSuccess && (
+              <div className="mt-4">
+                <p className="text-sm text-gray-600">
+                  Result: {computeResult}
+                </p>
+              </div>
+            )}
+          </>)
+        }
       </div>
     </div>
-  );
+  )
 }
