@@ -8,7 +8,7 @@ import {
   useNilStoreProgram,
   useNilStoreValue
 } from "@nillion/client-react-hooks";
-import {NadaValues, PartyName, ProgramBindings, ProgramId, StoreAcl} from "@nillion/client-core";
+import {PartyName, ProgramBindings, ProgramId, StoreAcl} from "@nillion/client-core";
 import {transformNadaProgramToUint8Array} from "@/utils/nadaTransform";
 
 export default function Compute() {
@@ -17,8 +17,8 @@ export default function Compute() {
   const nilStoreProgram = useNilStoreProgram()
   const [selectedProgramCode, setSelectedProgramCode] = useState("");
 
-  const nilStoreValue1 = useNilStoreValue({ttl: 30}) // 30 days
-  const nilStoreValue2 = useNilStoreValue({ttl: 30}) // 30 days
+  const nilStoreValue1 = useNilStoreValue()
+  const nilStoreValue2 = useNilStoreValue()
   const [secretValue1, setSecretValue1] = useState<number>(0);
   const [secretValue2, setSecretValue2] = useState<number>(0);
 
@@ -61,9 +61,9 @@ export default function Compute() {
     const acl = StoreAcl.create().allowCompute(
       client.userId,
       ProgramId.parse(nilStoreProgram.data)
-    ); // TODO(tim) accept acl as execute parameter
+    );
 
-    nilStoreValue1.execute(secretValue1)
+    nilStoreValue1.execute({name: "my_int1",data: secretValue1, ttl: 30, acl})
   };
 
   // Action to handle storing secret integer 2
@@ -73,9 +73,9 @@ export default function Compute() {
     const acl = StoreAcl.create().allowCompute(
       client.userId,
       ProgramId.parse(nilStoreProgram.data)
-    ); // TODO(tim) accept acl as execute parameter
+    );
 
-    nilStoreValue2.execute(secretValue2)
+    nilStoreValue2.execute({name: "my_int2", data: secretValue2, ttl: 30, acl})
   };
 
   // Handle using the secret_addition Program
@@ -84,31 +84,28 @@ export default function Compute() {
       throw new Error("nilStoreProgram failed")
 
     // Bindings
-    const bindings = ProgramBindings.create(nilStoreProgram.data);
-    bindings.addInputParty(
-      PARTY_NAME,
-      client.partyId
-    );
-
-    bindings.addOutputParty(
-      PARTY_NAME,
-      client.partyId
-    );
+    const bindings = ProgramBindings.create(nilStoreProgram.data)
+      .addInputParty(
+        PARTY_NAME,
+        client.partyId
+      ).addOutputParty(
+        PARTY_NAME,
+        client.partyId
+      );
 
     nilCompute.execute({
       bindings,
-      values: NadaValues.create(),
       storeIds: [nilStoreValue1.data, nilStoreValue2.data],
     });
   };
 
   const handleFetchComputeResult = async () => {
     if (!nilCompute.isSuccess) throw new Error("nilCompute failed or hasn't run")
-    nilComputeOutput.execute(nilCompute.data)
+    nilComputeOutput.execute({id: nilCompute.data})
   }
 
   let computeResult = ""
-  if(nilComputeOutput.isSuccess) {
+  if (nilComputeOutput.isSuccess) {
     computeResult = JSON.stringify(nilComputeOutput.data, (key, value) => {
       if (typeof value === "bigint") {
         return value.toString();
@@ -154,13 +151,6 @@ export default function Compute() {
           onChange={(e) => setSecretValue1(Number(e.target.value))}
           className="w-full px-3 py-2 text-gray-700 border rounded-lg focus:outline-none focus:border-blue-500"
         />
-        <button
-          onClick={() => handleStoreSecretInteger1()}
-          className="bg-blue-500 mb-4 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition duration-300 ease-in-out mt-2"
-        >
-          Store Secret
-        </button>
-
         {nilStoreValue1.isSuccess && (
           <div className="mt-4">
             <p className="text-sm text-gray-600">
@@ -168,7 +158,12 @@ export default function Compute() {
             </p>
           </div>
         )}
-
+        <button
+          onClick={() => handleStoreSecretInteger1()}
+          className="bg-blue-500 mb-4 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition duration-300 ease-in-out mt-2"
+        >
+          Store Secret
+        </button>
         <p> Store your int_2</p>
         <input
           placeholder="Enter your secret value"
@@ -176,13 +171,6 @@ export default function Compute() {
           onChange={(e) => setSecretValue2(Number(e.target.value))}
           className="w-full px-3 py-2 text-gray-700 border rounded-lg focus:outline-none focus:border-blue-500"
         />
-        <button
-          onClick={() => handleStoreSecretInteger2()}
-          className="bg-blue-500 mb-4 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition duration-300 ease-in-out mt-2"
-        >
-          Store Secret
-        </button>
-
         {nilStoreValue2.isSuccess && (
           <div className="mt-4">
             <p className="text-sm text-gray-600">
@@ -190,6 +178,12 @@ export default function Compute() {
             </p>
           </div>
         )}
+        <button
+          onClick={() => handleStoreSecretInteger2()}
+          className="bg-blue-500 mb-4 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition duration-300 ease-in-out mt-2"
+        >
+          Store Secret
+        </button>
       </div>
 
       <div className="border-t border-gray-300 my-4"></div>

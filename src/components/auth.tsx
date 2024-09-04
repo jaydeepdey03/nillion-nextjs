@@ -4,7 +4,7 @@ import { createSignerFromKey } from "@nillion/client-payments";
 import { useNillionAuth, UserCredentials } from "@nillion/client-react-hooks";
 
 export const Auth: FC = () => {
-  const { authenticated, login, logout } = useNillionAuth();
+  const { login, logout } = useNillionAuth();
   const [seed, setUserSeed] = useState("example-secret-seed");
   const [secretKey, setSecretKey] = useState(
     "9a975f567428d054f2bf3092812e6c42f901ce07d9711bc77ee2cd81101f42c5"

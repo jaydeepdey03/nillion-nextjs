@@ -10,11 +10,10 @@
     "copy": "cp ./nada_program/src/secret_addition.py ./public/programs && cp ./nada_program/target/secret_addition.nada.bin ./public/programs"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "^2.0.0",
-    "@nillion/client-core": "^0.1.0-rc.14",
-    "@nillion/client-payments": "0.1.0-rc.14",
-    "@nillion/client-react-hooks": "^0.1.0-rc.14",
-    "@nillion/client-vms": "^0.1.0-rc.14",
+    "@nillion/client-core": "^0.1.0-rc.16",
+    "@nillion/client-payments": "0.1.0-rc.16",
+    "@nillion/client-react-hooks": "^0.1.0-rc.16",
+    "@nillion/client-vms": "^0.1.0-rc.16",
     "@radix-ui/react-icons": "^1.3.0",
     "@radix-ui/react-slot": "^1.1.0",
     "class-variance-authority": "^0.7.0",
